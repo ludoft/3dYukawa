@@ -506,9 +506,12 @@ for (const auto& sequence : sequences) {
 }
 
 const map<char, string> filePathMap = {
-        {'g', "/tmp/gAdjList.al"},
+        /*{'g', "/tmp/gAdjList.al"},
         {'h', "/tmp/hAdjList.al"},
-        {'l', "/tmp/lAdjList.al"}
+        {'l', "/tmp/lAdjList.al"}*/
+        {'g', "/mnt/zfsusers/ludo/dphil/3dYukawa/misc/gAdjList.al"},
+        {'h', "/mnt/zfsusers/ludo/dphil/3dYukawa/misc/hAdjList.al"},
+        {'l', "/mnt/zfsusers/ludo/dphil/3dYukawa/misc/lAdjList.al"}
 };
 
 
@@ -604,7 +607,7 @@ int main(int argc, char* argv[]) {
     /********************************/
     /*** Now perform output */
     if (argc==4){ // i.e. args: exec, contraction, vertices, outputfile
-        outputFilename = string(argv[3]);//{"/tmp/gAdjList.al", "/tmp/hAdjList.al"};//, "/tmp/gAdjList.al"};
+        outputFilename = string(argv[3]);
     } else { // Create own outputfile
         outputFilename = "/tmp/fastOutput-"+string(argv[2])+"-c"+string(argv[1])+".out";
     } 

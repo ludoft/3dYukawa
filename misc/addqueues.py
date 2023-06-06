@@ -12,7 +12,7 @@ filename = "./executeThese3dSRFC446.list"  # Update with your file name
 with open(filename, "r") as file:
     commands = file.read().splitlines()
 
-commandsToDo = commands[1:50]
+commandsToDo = commands[1:10]
 print(len(commandsToDo))
 
 logging.debug(f"{str(datetime.now())}: Beginning ALL with RAM at {str(psutil.virtual_memory()[2])}")
@@ -41,12 +41,12 @@ with ThreadPoolExecutor(max_workers=14) as executor:
 
 bad_substrings = ["hlll", "hhll", "ghll", "gghl", "gggh"]
 for command in commandsToDo:
-    #subprocess.run(command,shell=True, check=True)
     if any(substring in command for substring in bad_substrings):
         commandToExecute = "addqueue -c '2 hours' -n 1 -m 5 -s -i -q bigmem -g tensor446 " + command
     else:
         commandToExecute = "addqueue -c '2 hours' -n 1 -m 2 -s -i -q long -g tensor446 " + command
     print(commandToExecute)
+    subprocess.run(commandToExecute,shell=True, check=True)
 
 
 print("Done.")
