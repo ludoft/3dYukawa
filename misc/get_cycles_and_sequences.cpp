@@ -6,10 +6,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <algorithm>
-//#include <boost/interprocess/file_mapping.hpp>
-//#include <boost/interprocess/mapped_region.hpp>
-
-#include "mathlink.h"
 
 using namespace std;
 

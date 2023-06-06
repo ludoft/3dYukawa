@@ -12,21 +12,24 @@
 #include <omp.h>
 //#include <boost/interprocess/file_mapping.hpp>
 //#include <boost/interprocess/mapped_region.hpp>
-//#include "mathlink.h"
+
+#include "vertexData.h"
 
 using namespace std;
 
 typedef int vert;
 typedef vector<array<int,2>> adjList;
-//typedef string analysisResultType;
+
 typedef pair<uint, vector<vert>> analysisResultType;
 typedef vector<size_t> IndexTuple;
 typedef pair<IndexTuple, analysisResultType> indexedResult;
 
 const int num_colours = 3;
 
+int num_coupling_constants = 0;
 vector<array<vert,2>>  contractionRules;
 adjList totalAdjList;
+vector<vector<int>> verticesToValues;
 
 pair<vector<vector<vert>>, vector<vector<vert>>> get_cycles_and_sequences_for_fixed_contraction(const adjList& adjacency_dict) {
     
@@ -35,24 +38,8 @@ pair<vector<vector<vert>>, vector<vector<vert>>> get_cycles_and_sequences_for_fi
     vector<vector<vert>> cycles;
     vector<vector<vert>> sequences;
 
-    /*vector<vector<int>> adjacency_dict(contraction_adjacency_dict); //Initialise it using the known data from the contraction_adjacency_dict.
-
-    // graphWithoutContractions itself is never used again after this
-    for (const auto& pair : graphWithoutContractions) { 
-        int vertex1 = pair.first;
-        int vertex2 = pair.second;
-        adjacency_dict[vertex1].emplace_back(vertex2);
-        adjacency_dict[vertex2].emplace_back(vertex1);
-    }*/
-
     unordered_set<vert> visited;
 
-    /*
-    unordered_map<int, int> lengths;
-    for (const auto& entry : adjacency_dict) {
-        lengths[entry.first] = entry.second.size();
-    }
-    */
     vector<pair<vert, vert>> lengths(numVerticesTotalPlusOne); //Reserve num_indices +1 
     // Iterate from 1, as that is the first vertex. We leave the zero entry empty.
     
@@ -66,7 +53,8 @@ pair<vector<vector<vert>>, vector<vector<vert>>> get_cycles_and_sequences_for_fi
     }); // Sort these in place
 
 
-    // Iterating from smallest valency this way ensures that we always start in the beginning of sequences. This means we never start accidentally in the middle, then having to patch up the two ends afterwards, which would take time.
+    // Iterating from smallest valency this way ensures that we always start in the beginning of sequences.
+    // This means we never start accidentally in the middle, then having to patch up the two ends afterwards, which would take time.
     for (const auto& vertexAndValency : verticesAndValencies) {
         vert vertex = vertexAndValency.first;
         vert isValencyTwo = vertexAndValency.second; //Valency is 0 if started on vertex of valency one, otherwise nonzero.
@@ -118,42 +106,6 @@ pair<vector<vector<vert>>, vector<vector<vert>>> get_cycles_and_sequences_for_fi
     return make_pair(cycles, sequences);
 }
 
-std::vector<std::pair<int, int>> parseMathematicaList(const std::string& input) {
-    std::vector<std::pair<int, int>> result;
-    std::istringstream ss(input);
-    char c;
-    int num1, num2;
-
-     if (ss >> c && c == '{') {
-        while (ss >> c && c != '}') {
-            if (c == '{') {
-                ss >> num1;
-                if (ss >> c && c == ',') {
-                    ss >> num2;
-                    result.push_back(std::make_pair(num1, num2));
-                    ss >> c; //Drop the } from the pair.
-                }
-            }
-        }
-    }
-
-    return result;
-}
-
-std::vector<std::pair<int, int>> parseSpaceSeparatedList(const std::string& input) {
-    std::vector<std::pair<int, int>> pairs;
-    std::istringstream ss(input);
-    int num;
-
-    while (ss >> num) {
-        int secondNum;
-        ss >> secondNum;
-        pairs.emplace_back(num, secondNum);
-    }
-    /*If the input is malformed, this will not notice.*/
-
-    return pairs;
-}
 
 std::vector<int> flattenVector(const std::vector<std::vector<int>>& inputVector) {
     std::vector<int> flattened;
@@ -218,53 +170,24 @@ std::vector<int> getTransposeForm(const std::vector<int>& out) {
 
 
 
-std::vector<adjList> processFile(const std::string& filename, int& totalCount) {
-    std::ifstream inputFile(filename);
-    if (!inputFile.is_open()) {
-        std::cerr << "Failed to open file: " << filename << std::endl;
-        return {};
-    }
+std::vector<adjList> processFullVertex(const vector<vector<int>>& fullVertexTlists, int& totalCount) {
+    vector<adjList> result;
 
-    std::string line;
-    std::getline(inputFile, line);
+    const int size=fullVertexTlists[0].size();
 
-    std::istringstream iss(line);
-    std::vector<int> firstLine;
-    int num;
-    while (iss >> num) {
-        firstLine.push_back(num);
-    }
+    vector<array<int, 2>> row(size);
 
+    array<int, 2> subvector;
+    subvector[1] = 0;
 
+    for (const auto& oneLine : fullVertexTlists) {
 
-    std::vector<adjList> result;
-    adjList firstAdjList;
-
-    const int size=firstLine.size();
-    firstAdjList.resize(size);
-    for (size_t i = 0; i < size; ++i) {
-        firstAdjList[i][0] = firstLine[i] + totalCount;
-    }
-    result.push_back(firstAdjList);
-    // Output some data:
-    //cout<<size<<endl;
-    //cout<<firstAdjList.size()<<endl;
-
-    std::vector<std::array<int, 2>> row(size);
-
-    while (std::getline(inputFile, line)) {
-        std::istringstream issLine(line);
-        int value;
-        std::array<int, 2> subvector;
-        subvector[1] = 0;
-        for (int i = 0; i < size && issLine >> value; ++i) {
-            subvector[0] = value + totalCount;
+        for (int i =0; i< size; i++) {
+            subvector[0] = oneLine[i] + totalCount;
             row[i] = subvector;
         }
-        //adjList list; list.vertices = row;
         result.push_back(row);
     }
-    inputFile.close();
 
     totalCount += size;
     return result;
@@ -282,7 +205,7 @@ vector<pair<IndexTuple,Result>> mapTuples(Function&& function, const std::vector
 
 
     size_t totalTuples = 1;
-    for (size_t i = 0; i < numLists; ++i) {
+    for (size_t i = 0; i < numLists; i++) {
         sizes[i] = lists[i].size();
         //if (sizes[i] == 0) { totalTuples = 0; break; }
         totalTuples *= sizes[i];
@@ -371,14 +294,42 @@ string makeMMAStringOutput(const IndexTuple& indices, const int numLoops) {
     return ss.str();
 }
 
+
+/*
+groupedLeadingIndex = GroupBy[MapIndexed[{#2[[1]], #1[[1]]} &, glPowerOutputs[ho][[1]]], #[[2]] &];
+(*Careful of of-by-one errors!*)
+#[[2]] & /@ SortBy[List @@ # & /@ Flatten@Values[ Thread[(First /@ #) -> First[#][[1]]] & /@ groupedLeadingIndex], First]
+
+We factor in the off-by-one of C++ counting already here.
+*/
+
+//unordered_map<int,int>gCoeffs = {{1, 1}, {1, 14}, {1, 27}, {2, 2}, {2, 3}, {2, 4}, {2, 5}, {2, 7}, {2, 9}, {2, 10}, {2, 11}, {2, 13}, {2, 15}, {2, 17}, {2, 18}, {2, 19}, {2, 21}, {2, 23}, {2, 24}, {2, 25}, {2, 26}, {6, 6}, {6, 8}, {6, 12}, {6, 16}, {6, 20}, {6, 22}};
+const array<string,21> variousPowersOfN = {"", "N1", "N2","N3","N4","N5","N6","N7","N8","N9","N10","N11","N12","N13","N14","N15","N16","N17","N18","N19","N20"};
+const vector<int> gCoeffMap = {1, 2, 2, 2, 2, 6, 2, 6, 2, 2, 2, 6, 2, 1, 2, 6, 2, 2, 2, 6, 2, 6, 2, 2, 2, 2, 1};
+const vector<int> lCoeffMap = {1, 2, 2, 2, 5, 6, 2, 6, 5, 2, 5, 6, 5, 14, 15, 6, 15, 15, 2, 6, 5, 6, 15, 15, 5, 15, 14};
+const vector<int> hCoeffMap = {1,2,2,2,5,5,2,5,5,5,5,2,5,5,2,2,2,18,19,19,21,19,21,19,19,21,19,21,19,19,2,18,2,19,21,19,19,19,21,21,19,19,19,21,19,2,19,19,2,19,19,18,21,21,21,19,19,21,19,19,5,19,21,19,5,21,21,21,69,21,69,21,69,74,19,5,21,19,19,21,5,21,69,21,69,74,19,21,69,21,2,19,19,18,21,21,2,19,19,19,21,19,19,21,19,5,21,19,21,21,69,19,5,21,69,21,21,74,69,19,5,19,21,21,69,21,19,21,5,74,69,19,69,21,21,5,19,21,21,21,69,19,69,74,5,21,19,21,69,21,5,21,19,19,69,74,21,21,69,21,5,19,69,21,21,2,19,19,19,21,19,19,21,19,19,19,2,21,21,18,5,21,19,21,69,21,19,74,69,21,69,21,5,21,19,5,19,21,19,74,69,21,69,21,69,21,21,21,5,19,2,19,19,19,19,21,19,19,21,21,21,18,19,19,2,2,2,18,19,19,21,19,21,19,19,21,19,21,19,19,2,1,2,5,2,5,5,5,2,2,5,5,5,2,5,18,2,2,21,19,19,21,19,19,19,19,21,19,19,21,19,5,21,5,19,21,21,69,21,21,21,69,69,19,74,19,2,19,19,2,19,21,19,19,18,21,21,21,19,19,21,5,19,21,19,5,69,74,19,21,69,21,21,21,69,19,5,21,21,21,69,5,21,19,19,69,74,21,21,69,21,5,19,69,19,74,21,5,19,21,21,69,69,21,21,19,2,19,21,19,19,19,19,2,19,21,19,21,18,21,19,2,19,21,18,21,19,21,19,2,19,19,19,19,21,21,5,19,21,21,69,69,21,21,19,5,21,74,19,69,19,5,21,69,21,21,74,69,19,19,21,5,69,21,21,21,5,19,69,21,21,21,69,21,19,74,69,5,19,21,19,2,19,19,19,21,21,21,18,19,19,21,19,2,19,19,5,21,74,19,69,69,21,21,21,69,21,21,19,5,2,18,2,19,21,19,19,19,21,21,19,19,19,21,19,18,2,2,21,19,19,21,19,19,19,19,21,19,19,21,2,2,1,5,5,2,5,2,5,5,2,5,2,5,5,19,21,5,5,21,19,21,21,69,69,19,74,21,21,69,21,19,5,21,5,19,69,19,74,21,21,69,21,69,21,19,19,2,19,19,2,21,19,19,21,19,19,18,21,21,19,21,5,21,69,21,5,19,21,21,21,69,19,69,74,19,19,2,21,19,19,19,2,19,21,18,21,19,21,19,21,19,5,69,74,19,21,19,5,69,21,21,21,21,69,21,19,5,69,21,21,21,21,69,5,19,21,19,74,69,19,19,2,19,21,19,21,18,21,19,2,19,19,19,21,19,21,5,74,69,19,69,21,21,21,19,5,21,69,21,19,19,2,21,21,18,19,19,21,19,19,21,2,19,19,21,19,5,21,69,21,69,21,21,74,19,69,19,5,21,19,21,5,69,21,21,74,19,69,69,21,21,19,21,5,2,19,19,2,19,19,18,21,21,21,19,19,21,19,19,19,5,21,5,19,21,21,69,21,21,21,69,69,19,74,19,21,5,5,21,19,21,21,69,69,19,74,21,21,69,2,5,5,1,2,2,2,5,5,5,2,5,5,2,5,19,19,21,2,2,18,19,19,21,19,19,21,21,19,19,19,21,19,2,18,2,19,21,19,21,19,19,19,19,21,18,21,21,2,19,19,2,19,19,19,19,21,19,19,21,21,69,21,5,19,21,19,5,21,74,19,69,69,21,21,21,21,69,5,21,19,19,21,5,69,21,21,74,19,69,21,21,69,5,19,21,19,74,69,5,19,21,21,21,69,19,21,19,2,19,19,19,19,21,19,2,19,21,18,21,19,69,74,5,21,19,21,69,21,21,19,5,69,21,21,21,69,21,5,21,19,19,69,74,21,21,69,5,19,21,19,19,21,2,19,19,19,21,19,21,18,21,19,2,19,19,74,69,5,19,21,21,21,69,69,21,21,21,19,5,5,19,21,19,5,21,21,21,69,21,69,21,69,74,19,19,2,19,19,2,19,21,19,19,18,21,21,21,19,19,21,19,5,21,5,19,69,19,74,21,21,69,21,69,21,19,19,21,2,2,18,19,19,21,19,19,21,21,19,19,5,2,5,2,1,2,5,2,5,2,5,5,5,5,2,21,19,19,18,2,2,21,19,19,19,21,19,19,21,19,21,21,69,19,5,21,5,19,21,19,74,69,21,69,21,21,19,19,19,2,19,19,2,19,19,19,21,21,21,18,69,19,74,21,5,19,21,19,5,21,69,21,69,21,21,21,18,21,19,2,19,19,19,21,2,19,19,19,21,19,69,21,21,19,5,21,74,19,69,19,5,21,69,21,21,21,21,69,21,5,19,69,21,21,19,21,5,74,69,19,69,21,21,21,5,19,21,21,69,19,69,74,5,21,19,74,19,69,19,5,21,69,21,21,21,21,69,21,5,19,19,19,21,19,2,19,21,18,21,19,21,19,19,19,2,5,21,19,19,21,5,21,69,21,69,74,19,21,69,21,21,5,19,21,19,5,69,74,19,21,69,21,21,21,69,19,19,2,19,19,2,21,19,19,21,19,19,18,21,21,19,21,19,2,18,2,19,21,19,21,19,19,19,19,21,21,19,19,18,2,2,21,19,19,19,21,19,19,21,19,5,5,2,2,2,1,5,5,2,5,5,2,2,5,5,21,69,21,19,21,5,5,21,19,21,69,21,19,74,69,69,74,19,21,19,5,21,5,19,69,21,21,21,69,21,21,19,19,19,19,2,19,19,2,21,21,18,19,19,21,69,21,21,21,19,5,21,69,21,5,21,19,19,69,74,74,69,19,19,21,5,69,21,21,21,5,19,21,21,69,19,21,19,19,19,2,21,21,18,19,19,2,19,21,19,21,21,18,19,19,2,19,21,19,19,21,19,2,19,19,69,21,21,19,21,5,74,69,19,69,21,21,19,5,21,21,69,21,21,19,5,69,21,21,74,69,19,19,21,5,2,19,19,18,21,21,2,19,19,19,21,19,19,21,19,19,5,21,21,21,69,5,21,19,19,69,74,21,21,69,19,21,5,21,69,21,5,19,21,21,21,69,19,69,74,18,21,21,2,19,19,2,19,19,19,19,21,19,19,21,21,21,69,19,5,21,5,19,21,19,74,69,21,69,21,21,69,21,19,21,5,5,21,19,21,69,21,19,74,69,2,5,5,2,5,5,1,2,2,2,5,5,2,5,5,19,21,19,19,19,21,2,2,18,19,19,21,19,21,19,19,19,21,19,21,19,2,18,2,19,21,19,19,19,21,19,19,21,19,19,21,2,19,19,2,19,19,18,21,21,21,69,21,19,74,69,5,19,21,19,5,21,21,21,69,19,74,69,21,69,21,5,21,19,19,21,5,21,69,21,19,21,19,19,21,19,2,19,19,18,21,21,2,19,19,21,21,69,19,69,74,5,21,19,21,21,69,19,5,21,19,69,74,21,21,69,5,19,21,21,69,21,19,21,5,5,21,19,21,21,69,19,5,21,69,21,21,74,69,19,21,5,19,69,19,74,21,5,19,21,21,69,69,21,21,19,19,2,21,19,19,19,2,19,21,18,21,19,21,19,21,69,21,5,19,21,19,5,21,74,19,69,69,21,21,21,19,19,19,2,19,19,2,19,19,19,21,21,21,18,69,74,19,21,19,5,21,5,19,69,21,21,21,69,21,19,21,19,19,19,21,2,2,18,19,19,21,19,21,19,5,5,2,5,2,5,2,1,2,5,2,5,5,5,2,21,19,19,21,19,19,18,2,2,21,19,19,21,19,19,69,21,21,74,19,69,19,5,21,5,19,21,21,69,21,21,21,18,19,19,21,19,2,19,19,2,19,21,19,19,21,69,21,69,21,21,21,5,19,21,19,5,69,74,19,74,69,19,69,21,21,19,5,21,21,21,69,5,21,19,69,21,21,21,21,69,21,5,19,69,19,74,21,5,19,19,21,19,21,18,21,19,2,19,21,19,19,19,19,2,5,19,21,21,69,21,19,21,5,74,69,19,69,21,21,19,2,19,21,19,19,19,19,2,19,21,19,21,18,21,21,19,5,69,74,19,21,19,5,69,21,21,21,21,69,21,21,69,5,21,19,19,21,5,69,21,21,74,19,69,69,19,74,21,5,19,21,19,5,21,69,21,69,21,21,21,19,19,19,19,2,19,19,2,21,21,18,19,19,21,19,19,21,19,21,19,2,18,2,19,21,19,19,19,21,21,19,19,21,19,19,18,2,2,21,19,19,21,19,19,5,2,5,5,5,2,2,2,1,5,5,2,5,2,5,74,19,69,69,21,21,19,21,5,5,21,19,21,21,69,69,21,21,21,69,21,21,19,5,21,5,19,69,19,74,19,19,21,21,21,18,19,19,2,19,19,2,21,19,19,69,21,21,74,69,19,19,21,5,21,69,21,5,19,21,21,18,21,19,21,19,19,19,2,21,19,19,19,2,19,21,21,69,69,21,21,21,19,5,69,74,19,21,19,5,5,19,21,21,21,69,19,69,74,5,21,19,21,69,21,19,2,19,21,18,21,19,21,19,2,19,19,19,19,21,21,19,5,69,21,21,21,21,69,5,19,21,19,74,69,21,21,69,5,19,21,19,74,69,5,19,21,21,21,69,21,18,21,19,2,19,19,19,21,2,19,19,19,21,19,69,21,21,21,19,5,21,69,21,5,21,19,19,69,74,19,19,21,19,19,21,2,19,19,2,19,19,18,21,21,69,21,21,74,19,69,19,5,21,5,19,21,21,69,21,74,19,69,69,21,21,19,21,5,5,21,19,21,21,69,5,2,5,5,2,5,2,5,5,1,2,2,2,5,5,21,19,19,19,19,21,19,19,21,2,2,18,19,19,21,19,19,21,21,19,19,19,21,19,2,18,2,19,21,19,21,19,19,21,19,19,18,21,21,2,19,19,2,19,19,69,19,74,21,21,69,21,69,21,5,19,21,19,5,21,21,21,69,69,19,74,21,21,69,5,21,19,19,21,5,5,21,19,19,69,74,21,21,69,21,5,19,69,21,21,21,5,19,21,21,69,69,21,21,19,5,21,74,19,69,19,19,2,19,21,19,21,18,21,19,2,19,19,19,21,19,21,19,2,19,19,19,19,21,19,2,19,21,18,21,69,21,21,19,5,21,74,19,69,19,5,21,69,21,21,74,69,19,19,21,5,69,21,21,21,5,19,21,21,69,21,69,21,19,74,69,5,19,21,19,5,21,21,21,69,21,21,18,19,19,21,19,2,19,19,2,19,21,19,19,69,21,21,21,69,21,21,19,5,21,5,19,69,19,74,21,19,19,19,19,21,19,19,21,2,2,18,19,19,21,5,5,2,2,5,5,5,2,5,2,1,2,5,2,5,19,21,19,19,21,19,21,19,19,18,2,2,21,19,19,69,74,19,21,69,21,21,21,69,19,5,21,5,19,21,21,19,19,18,21,21,21,19,19,19,2,19,19,2,19,21,69,21,21,21,69,69,19,74,21,5,19,21,19,5,2,19,19,19,21,19,19,21,19,19,19,2,21,21,18,19,5,21,69,21,21,74,69,19,19,21,5,69,21,21,19,21,5,74,69,19,69,21,21,21,19,5,21,69,21,19,69,74,5,21,19,21,69,21,21,19,5,69,21,21,21,21,69,21,5,19,69,21,21,19,21,5,74,69,19,19,21,19,19,19,2,21,21,18,19,19,2,19,21,19,19,74,69,21,69,21,5,21,19,19,21,5,21,69,21,21,69,21,69,21,21,21,5,19,21,19,5,69,74,19,19,19,21,21,21,18,19,19,2,19,19,2,21,19,19,19,19,21,21,19,19,19,21,19,2,18,2,19,21,19,19,21,19,19,21,19,21,19,19,18,2,2,21,19,19,2,5,5,5,5,2,5,5,2,2,2,1,5,5,2,21,69,21,69,74,19,21,69,21,19,21,5,5,21,19,21,21,69,21,69,21,69,74,19,21,19,5,21,5,19,18,21,21,21,19,19,21,19,19,19,19,2,19,19,2,5,21,19,21,69,21,19,74,69,21,69,21,5,21,19,21,5,19,69,21,21,21,69,21,19,74,69,5,19,21,19,19,2,21,21,18,19,19,21,19,19,21,2,19,19,21,69,21,5,21,19,19,69,74,21,21,69,5,19,21,69,21,21,21,5,19,21,21,69,19,69,74,5,21,19,21,21,18,19,19,2,19,21,19,19,21,19,2,19,19,19,21,19,19,21,19,2,19,19,18,21,21,2,19,19,74,69,19,69,21,21,19,5,21,21,21,69,5,21,19,69,21,21,74,69,19,19,21,5,21,69,21,5,19,21,21,19,19,21,19,19,18,21,21,2,19,19,2,19,19,69,74,19,21,69,21,21,21,69,19,5,21,5,19,21,21,69,21,69,74,19,21,69,21,19,21,5,5,21,19,5,5,2,5,5,2,2,5,5,2,5,5,1,2,2,21,19,19,19,21,19,19,21,19,19,19,21,2,2,18,19,21,19,21,19,19,19,19,21,19,21,19,2,18,2,5,19,21,19,74,69,21,69,21,69,21,21,21,5,19,19,2,19,19,19,21,21,21,18,19,19,21,19,2,19,21,19,5,21,69,21,69,21,21,74,19,69,19,5,21,19,19,21,2,19,19,19,21,19,21,18,21,19,2,19,74,19,69,19,5,21,69,21,21,21,21,69,21,5,19,69,21,21,19,21,5,74,69,19,69,21,21,19,5,21,21,21,69,19,69,74,5,21,19,21,21,69,19,5,21,69,21,21,21,21,69,21,5,19,69,19,74,21,5,19,21,18,21,19,21,19,19,19,2,21,19,19,19,2,19,69,19,74,21,21,69,21,69,21,5,19,21,19,5,21,21,19,19,18,21,21,21,19,19,19,2,19,19,2,19,21,21,69,21,69,21,69,74,19,21,19,5,21,5,19,21,19,19,19,21,19,19,21,19,19,19,21,2,2,18,5,2,5,2,5,5,5,5,2,5,2,5,2,1,2,19,19,21,19,19,21,21,19,19,21,19,19,18,2,2,2,19,19,19,19,21,19,19,21,21,21,18,19,19,2,19,5,21,74,19,69,69,21,21,21,69,21,21,19,5,19,21,5,69,21,21,74,19,69,69,21,21,19,21,5,19,74,69,5,19,21,21,21,69,69,21,21,21,19,5,19,19,21,19,2,19,21,18,21,19,21,19,19,19,2,21,69,21,21,19,5,69,21,21,74,69,19,19,21,5,19,69,74,21,21,69,5,19,21,21,69,21,19,21,5,19,21,19,21,18,21,19,2,19,21,19,19,19,19,2,21,21,69,69,21,21,21,19,5,69,74,19,21,19,5,21,21,69,69,19,74,21,21,69,5,21,19,19,21,5,21,69,21,21,21,69,69,19,74,21,5,19,21,19,5,18,21,21,21,19,19,21,19,19,19,19,2,19,19,2,19,21,19,21,19,19,19,19,21,19,21,19,2,18,2,19,19,21,19,19,21,21,19,19,21,19,19,18,2,2,2,5,5,5,2,5,5,2,5,5,5,2,2,2,1};
+
+// Helper function to convert a vector to a string
+string makeMMAIndexStringCoeffMap(const IndexTuple& indices) {
+    ostringstream ss;
+    ss << (verticesToValues[0][indices[0]]);//Don't add one here, as the map already has the addition of one built in.
+    for (size_t i=1; i<indices.size(); ++i) {
+        ss <<","<< (verticesToValues[i][indices[i]]); // Likewise
+    }
+    
+    return ss.str();
+}
+
 template <typename Function, typename List, typename Result>
-map<string,vector<string>> mapTuplesAndGroup(Function&& function, const std::vector<List>& lists) {
+//map<string,vector<string>> mapTuplesAndGroup(Function&& function, const std::vector<List>& lists) {
+unordered_map<string,unordered_map<string, map<int,int>>> mapTuplesAndGroup(Function&& function, const std::vector<List>& lists) {
     const size_t numLists = lists.size();
     std::vector<size_t> sizes(numLists);
 
     IndexTuple indices(numLists, 0);
+    string indicesMapped;
 
-    map<string,vector<string>> groups;
+    unordered_map<string,unordered_map<string, map<int, int>>> groups;
 
     size_t totalTuples = 1;
     for (size_t i = 0; i < numLists; ++i) {
@@ -388,7 +339,7 @@ map<string,vector<string>> mapTuplesAndGroup(Function&& function, const std::vec
     //vector<pair<IndexTuple,Result>> results(totalTuples);
     std::vector<typename List::value_type> elements(numLists);
 
-    Result thisResult;
+    Result resultNumloopsAndTrules;
     string stringKey;
     
     for (size_t i = 0; i < totalTuples; ++i) {
@@ -397,8 +348,10 @@ map<string,vector<string>> mapTuplesAndGroup(Function&& function, const std::vec
         }
 
         //results[i] = make_pair(indices,function(elements));
-        thisResult = function(elements);
-        groups[vectorToString(thisResult.second)].push_back(makeMMAStringOutput(indices,thisResult.first));
+        resultNumloopsAndTrules = function(elements); // This returns a number (numLoops) and a vector (the transpose rule that defines the vertex it has been reducd to)
+        indicesMapped = makeMMAIndexStringCoeffMap(indices); // Map indices to reduce the coeff complexity.
+        //groups[vectorToString(resultNumloopsAndTrules.second)].push_back(makeMMAStringOutput(indices,resultNumloopsAndTrules.first));
+        groups[vectorToString(resultNumloopsAndTrules.second)][indicesMapped][resultNumloopsAndTrules.first]++; //Increment the number of entries for this coefficient at this loop count.
 
         size_t k = numLists - 1;
         while (k != static_cast<size_t>(-1)) {
@@ -505,28 +458,23 @@ for (const auto& sequence : sequences) {
     return make_pair(cycles.size(), transposeFormToBe);
 }
 
-const map<char, string> filePathMap = {
-        /*{'g', "/tmp/gAdjList.al"},
-        {'h', "/tmp/hAdjList.al"},
-        {'l', "/tmp/lAdjList.al"}*/
-        {'g', "/mnt/zfsusers/ludo/dphil/3dYukawa/misc/gAdjList.al"},
-        {'h', "/mnt/zfsusers/ludo/dphil/3dYukawa/misc/hAdjList.al"},
-        {'l', "/mnt/zfsusers/ludo/dphil/3dYukawa/misc/lAdjList.al"}
+const map<char,vector<int>> vertexToValue = {
+        {'g', gCoeffMap},
+        {'h', hCoeffMap},
+        {'l', lCoeffMap}
 };
 
+vector<vector<int>> mapStringToVertexMaps(const string& input) {
+ vector<vector<int>> result;
+ for (const auto& ch : input) {
+     auto it =vertexToValue.find(ch);
+     if (it !=vertexToValue.end()) {
+         result.push_back(it->second);
+     }
+ }
 
-vector<string> mapStringToFilePaths(const string& input) {
-    vector<string> result;
-    for (const auto& ch : input) {
-        auto it = filePathMap.find(ch);
-        if (it != filePathMap.end()) {
-            result.push_back(it->second);
-        }
-    }
-
-    return result;
+ return result;
 }
-
 
 vector<array<int,2>> parseStringContractionRules(const string& input) {
     vector<array<int,2>> result;
@@ -545,21 +493,12 @@ vector<array<int,2>> parseStringContractionRules(const string& input) {
 
 
 map<string,vector<string>> GroupBy22(const vector<indexedResult>&indexedResults) {
-    //map<string, vector<pair<IndexTuple, int>>> groups;
     map<string,vector<string>> groups;
-
     // Group pairs based on the second element (string)
     for (const auto& pair : indexedResults) {
         string key = vectorToString(pair.second.second);
         groups[key].push_back(makeMMAStringOutput(pair.first, pair.second.first));
     }
-
-    /*
-    // Convert the map to a vector of vectors
-    vector<vector<string>> result;
-    for (const auto& group : groups) {
-        result.push_back(group.second);
-    }*/
 
     return groups;
 }
@@ -572,16 +511,30 @@ int main(int argc, char* argv[]) {
     }
     contractionRules = parseStringContractionRules(argv[1]);
 
-    vector<string> fileNames =  mapStringToFilePaths(argv[2]);//{"/tmp/gAdjList.al", "/tmp/hAdjList.al"};//, "/tmp/gAdjList.al"};
+    verticesToValues = mapStringToVertexMaps(argv[2]);
+
+    num_coupling_constants= 0;
+
+    vector<vector<vector<int>>> couplingConstantAdjLists;
+    string whichVerticesString = argv[2];
+    for (const auto& vertexChar : whichVerticesString) {
+        auto it = vertToVertAdjList.find(vertexChar);
+        if (it !=  vertToVertAdjList.end()) {
+             couplingConstantAdjLists.push_back(it->second);
+             num_coupling_constants++;
+        } else {
+            cout<< "Could not load vertex "<< std::string(vertexChar,1)<< ". Exiting 1"<<endl;
+            return 1;
+        }
+    }
 
     int totalCount = 0;  // Running total of totalCount
     vector<vector<adjList>> allNumbers;
      
     
-     for (const auto& filename : fileNames) {
-        std::vector<adjList> output = processFile(filename, totalCount);
+     for (const auto&  couplingCAdjList : couplingConstantAdjLists) {
+        std::vector<adjList> output = processFullVertex(couplingCAdjList, totalCount);
          allNumbers.push_back(output);
-         
          /*cout << "Total number of integers in " << filename << ": " << totalCount << endl;
         for (const auto& list : output) { for (const auto& subvector : list) { std::cout << "(" << subvector[0] << ", " << subvector[1] << ") "; } std::cout << std::endl; }*/
  }
@@ -590,7 +543,7 @@ int main(int argc, char* argv[]) {
     //adjList totalAdjList(totalCount+1); //Add one to size.
     totalAdjList.resize(totalCount+1);
     totalAdjList[0] ={0,0};
-    //int count = 0; mapTuples([&count, &totalAdjList, &totalCount](const std::vector<adjList>& elements) { count++; resultStream<<analyseListOfAdjLists(elements,totalAdjList,totalCount);  },allNumbers); std::cout << "Total tuples: " << count << std::endl;
+    //int count = 0; mapTuples([&count, &totalAdjList, &totalCount](const std::vector<adjList>& elements) { count++; rS<<analyseListOfAdjLists(elements,totalAdjList,totalCount);  },allNumbers); std::cout << "Total tuples: " << count << std::endl;
 
     //omp_set_num_threads(8);
     //vector<indexedResult> allTuplesRun = mapTuples<decltype(analyseListOfAdjLists), vector<adjList>,analysisResultType>(analyseListOfAdjLists, allNumbers); 
@@ -601,7 +554,8 @@ int main(int argc, char* argv[]) {
     //std::cout << "Total tuples: " << allTuplesRun.size() << std::endl;
     
 
-    map<string,vector<string>> gathered = mapTuplesAndGroup<decltype(analyseListOfAdjLists), vector<adjList>,analysisResultType>(analyseListOfAdjLists, allNumbers); 
+    //map<string,vector<string>> gathered = mapTuplesAndGroup<decltype(analyseListOfAdjLists), vector<adjList>,analysisResultType>(analyseListOfAdjLists, allNumbers); 
+    unordered_map<string,unordered_map<string, map<int,int>>> gathered = mapTuplesAndGroup<decltype(analyseListOfAdjLists), vector<adjList>,analysisResultType>(analyseListOfAdjLists, allNumbers);
 
     string outputFilename;
     /********************************/
@@ -615,24 +569,36 @@ int main(int argc, char* argv[]) {
     if (!outputFile) { cout << "Error opening output file: " << outputFilename << endl; return 1; }
 
     // Concatenate the strings
-    std::ostringstream resultStream;
+    std::ostringstream rS;
     // Create an ostringstream to store all results for this execution. This is output at the end.
 
     //map<string,vector<string>> gathered = GroupBy22(allTuplesRun);
-    resultStream<< "tensJustNums[{";
-    for (const auto& group: gathered) {
-            resultStream << "{";
-            for (const auto& str: group.second) {
-                resultStream << str << "+";
-            }
-            resultStream.seekp(-1,resultStream.cur);
-            resultStream << ",{" << group.first;
-            resultStream.seekp(-1,resultStream.cur);
-            resultStream << "}},";
-        }
-        resultStream.seekp(-1,resultStream.cur); //Remove final comma
-    resultStream<< "}, obj]";
-    outputFile << resultStream.str();
+    rS<< "tensJustNums[{";
+    for (const auto& structAndOverallCoeff: gathered) {
+        // structAndOverallCoeff is effectively GroupBy[list, transposeStructure]
+        // structAndOverallCoeff.first is the transpose rule; structAndOverallCoeff.second is the map of coefficients to {numLoops->occurence, ..}
+        // i.e. now we iterate over{ coeff->{0->5, 1->3, 2->10, 3-> ...}, coeff2->{...}}
+            rS << "{";
+            for (const auto& coeffAndNFactorsPair: structAndOverallCoeff.second) {
+                    // Print c[...] 
+
+                    rS << "c["<< coeffAndNFactorsPair.first;
+                    rS << "](";
+                    // Print (a N^0 + b N^3 + c N^4 + ...)+
+                    for (const auto& loopCountAndValue :   coeffAndNFactorsPair.second){
+                        rS << loopCountAndValue.second << variousPowersOfN[loopCountAndValue.first] << "+";
+                    }
+                    rS.seekp(-1,rS.cur);
+                    rS << ")+";
+                }
+            rS.seekp(-1,rS.cur);
+            rS << ",{" << structAndOverallCoeff.first;
+        rS.seekp(-1,rS.cur);
+        rS << "}},";
+    }
+    rS.seekp(-1,rS.cur); //Remove final comma
+    rS<< "}, obj]";
+    outputFile << rS.str();
     outputFile.close();
 
     return 0;

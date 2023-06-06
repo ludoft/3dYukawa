@@ -29,7 +29,7 @@ def execute_command(command):
     logging.debug(f"{str(datetime.now())}: DONE '{printcommand}' executed in {execution_time:.2f} seconds.")
 
 # Execute commands in parallel using 12 cores
-with ThreadPoolExecutor(max_workers=14) as executor:
+with ThreadPoolExecutor(max_workers=12) as executor:
     # Submit commands for execution
     futures = [executor.submit(execute_command, command) for command in commandsToDo]
 
