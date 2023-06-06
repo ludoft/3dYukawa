@@ -8,7 +8,7 @@ from datetime import datetime
 logging.basicConfig(level=logging.DEBUG)
 
 # Read the list of commands from a file
-filename = "/tmp/executeTheseFastOutputs.txt"  # Update with your file name
+filename = "./executeThese3dSRFC446.list"  # Update with your file name
 with open(filename, "r") as file:
     commands = file.read().splitlines()
 
