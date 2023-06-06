@@ -563,13 +563,14 @@ map<string,vector<string>> GroupBy22(const vector<indexedResult>&indexedResults)
 
 int main(int argc, char* argv[]) {
 
-    if (argc < 2) {
+    if (argc < 3) {
         cout << "Usage: ./get_cycles_and_sequences.out <contraction 1-4-5-8...> <vertices e.g. gghl> <outputfile>" << endl;
         return 1;
     }
     contractionRules = parseStringContractionRules(argv[1]);
 
     vector<string> fileNames =  mapStringToFilePaths(argv[2]);//{"/tmp/gAdjList.al", "/tmp/hAdjList.al"};//, "/tmp/gAdjList.al"};
+
     int totalCount = 0;  // Running total of totalCount
     vector<vector<adjList>> allNumbers;
      
@@ -599,9 +600,14 @@ int main(int argc, char* argv[]) {
 
     map<string,vector<string>> gathered = mapTuplesAndGroup<decltype(analyseListOfAdjLists), vector<adjList>,analysisResultType>(analyseListOfAdjLists, allNumbers); 
 
+    string outputFilename;
     /********************************/
     /*** Now perform output */
-    string outputFilename = "/tmp/fastOutput-"+string(argv[2])+"-c"+string(argv[1])+".out";
+    if (argc==4){ // i.e. args: exec, contraction, vertices, outputfile
+        outputFilename = string(argv[3]);//{"/tmp/gAdjList.al", "/tmp/hAdjList.al"};//, "/tmp/gAdjList.al"};
+    } else { // Create own outputfile
+        outputFilename = "/tmp/fastOutput-"+string(argv[2])+"-c"+string(argv[1])+".out";
+    } 
     ofstream outputFile(outputFilename);
     if (!outputFile) { cout << "Error opening output file: " << outputFilename << endl; return 1; }
 
