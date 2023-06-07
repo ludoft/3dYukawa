@@ -14,6 +14,11 @@ all: $(PRGM)
 
 debug: CXXFLAGS += -pg -ggdb3
 debug: $(PRGM)
+debug:
+	$(info Now optionally run:)
+	$(info time valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes ./tensorReducer 7-25-8-26-9-27-10-28-11-29-12-30 gh /tmp/binbry.test)
+	$(info callgrind_annotate --show-percs=yes --tree=both --auto=yes callgrind.out.20269 > tree.20269)
+	$(info WHEREVER/gprof2dot.py -f callgrind callgrind.out.20269 | dot -Tsvg -o output.svg)
 
 $(PRGM): $(OBJS)
 	$(CXX) $(OBJS) $(LDLIBS) -o $@
