@@ -1,5 +1,5 @@
 #https://gist.github.com/zachwhaley/9458612
-CXXFLAGS = -std=c++2a -O3 -Wall -Wextra -pedantic -funroll-loops -finline-functions #-march=native -std=c++14 
+CXXFLAGS = -std=c++17 -O3 -Wall -Wextra -pedantic -funroll-loops -finline-functions #-march=native -std=c++14 
 LDLIBS =
 
 PRGM  = tensorReducer
