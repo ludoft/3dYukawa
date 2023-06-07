@@ -9,7 +9,11 @@ DEPS := $(OBJS:.o=.d)
 
 .PHONY: all clean
 
+# By default, make begins by processing the first target that does not begin with a . aka the default goal
 all: $(PRGM)
+
+debug: CXXFLAGS += -pg -ggdb3
+debug: $(PRGM)
 
 $(PRGM): $(OBJS)
 	$(CXX) $(OBJS) $(LDLIBS) -o $@
