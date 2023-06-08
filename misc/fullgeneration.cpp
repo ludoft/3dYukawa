@@ -19,7 +19,7 @@ using namespace std;
 
 typedef vector<size_t> IndexTuple;
 typedef string indexAsKey;
-struct VectorHasher { //https://stackoverflow.com/a/53283994
+/*struct VectorHasher { //https://stackoverflow.com/a/53283994
     int operator()(const vector<size_t> &V) const {
         int hash = V.size();
         for(auto &i : V) {
@@ -37,7 +37,7 @@ struct FastVectorHasher {
         }
         return hash;
     }
-};
+};*/
 //typedef unordered_map<indexAsKey, map<int, int>,VectorHasher> umap_indices_to_loopcounter;
 typedef unordered_map<indexAsKey, map<int, int>> umap_indices_to_loopcounter;
 typedef int vert;
@@ -62,7 +62,7 @@ pair<vector<vector<vert>>, vector<vector<vert>>> get_cycles_and_sequences_for_fi
     vector<vector<vert>> cycles;
     vector<vector<vert>> sequences;
 
-    unordered_set<vert> visited;
+    unordered_set<vert> visited(numVerticesTotalPlusOne-1);
 
     vector<pair<vert, vert>> lengths(numVerticesTotalPlusOne); //Reserve num_indices +1 
     // Iterate from 1, as that is the first vertex. We leave the zero entry empty.
@@ -130,9 +130,19 @@ pair<vector<vector<vert>>, vector<vector<vert>>> get_cycles_and_sequences_for_fi
     return make_pair(cycles, sequences);
 }
 
+/*
+ std::vector<int> flattenVector(const std::vector<array<int,2>>& inputVector, const size_t& finalTruleSize) {
+     std::vector<int> flattened(finalTruleSize);
+     for (size_t i=0; i<finalTruleSize; i+=2) {
+         flattened[i] = inputVector[i][0];
+         flattened[i+1] = inputVector[i][1];
+     }
+     return flattened;
+ }
+*/
 
-std::vector<int> flattenVector(const std::vector<std::vector<int>>& inputVector) {
-    std::vector<int> flattened;
+std::vector<int> flattenVector(const std::vector<array<int,2>>& inputVector,const size_t& finalTruleSize) {
+    std::vector<int> flattened(finalTruleSize);
     for (const auto& subVector : inputVector) {
         flattened.insert(flattened.end(), subVector.begin(), subVector.end());
     }
@@ -154,31 +164,31 @@ std::vector<int> getTransposeForm(const std::vector<int>& out) {
     // Create a map to assign new values to sorted elements
     //for (auto const& c :fout)std::cout << c << ' ';
     //std::vector<int> out = {15, 3, 36, 33, 1, 13, 34, 31, 14, 2, 32, 35};
-    std::unordered_map<int, int> mapToNew;
+    static const size_t finalTruleSize = out.size();
+    std::unordered_map<int, int> mapToNew(finalTruleSize);
+
     std::vector<int> sortedOut = out;
     std::sort(sortedOut.begin(), sortedOut.end());
-    for (size_t i = 0; i < sortedOut.size(); i++) {
+    for (size_t i = 0; i < finalTruleSize; i++) {
         mapToNew[sortedOut[i]] = i + 1;
     }
-
-    // Apply transformations and partition the resulting vector
-    std::vector<int> partitionedNew;
-    for (const auto& num : out) {
-        partitionedNew.push_back(mapToNew[num]);
-    }
-    std::vector<std::vector<int>> partitioned;
-    for (size_t i = 0; i < partitionedNew.size(); i += 2) {
-        partitioned.push_back({partitionedNew[i], partitionedNew[i + 1]});
-    }
-
-    // Sort each pair within the resulting vector
-    for (auto& pair : partitioned) {
-        std::sort(pair.begin(), pair.end());
+    // Apply transformations and partition the resulting vector. Sort each pair.
+    std::vector<array<vert,2>> partitioned(finalTruleSize/2);
+    vert firstInPair;
+    vert secondInPair;
+    for (size_t i = 0; i <finalTruleSize; i += 2) {
+        firstInPair = mapToNew[out[i]];
+        secondInPair = mapToNew[out[i + 1]];
+        if (firstInPair < secondInPair) {
+            partitioned[i/2] = {firstInPair,secondInPair};
+        } else {
+            partitioned[i/2] = {secondInPair,firstInPair};
+        }
     }
 
     // Sort the transformed pairs by modulo operation, i.e. by colour. Break ties by whichever number is smaller.
     std::sort(partitioned.begin(), partitioned.end(),
-            [](const std::vector<int>& a, const std::vector<int>& b) {
+            [](const array<int,2>& a, const array<int,2>& b) {
             if (a[0] % num_colours == b[0] % num_colours){
                 return a[0]<b[0];
             } else{
@@ -188,16 +198,15 @@ std::vector<int> getTransposeForm(const std::vector<int>& out) {
         } // comp: comparison function object (i.e. an object that satisfies the requirements of Compare) which returns true if the first argument is less than (i.e. is ordered before) the second. 
     );
 
-    return flattenVector(partitioned);
+    return flattenVector(partitioned,finalTruleSize);
 } 
 
 
-
-
+// When loading up the full list, do the following
 std::vector<adjList> processFullVertex(const vector<vector<int>>& fullVertexTlists, int& totalCount) {
-    vector<adjList> result;
-
     const int size=fullVertexTlists[0].size();
+    vector<adjList> result;
+    result.reserve(fullVertexTlists.size());
 
     vector<array<int, 2>> row(size);
 
@@ -288,7 +297,7 @@ vector<pair<IndexTuple,Result>> mapTuples(Function&& function, const std::vector
 
 // Helper function to convert a vector to a string
 string vectorToString(const vector<int>& vec) {
-    stringstream ss;
+    ostringstream ss;
     for (const auto& value : vec) {
         ss << value << ",";
     }
