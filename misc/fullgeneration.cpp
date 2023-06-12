@@ -6,6 +6,7 @@
 #include <stack>
 #include <fstream>
 #include <sstream>
+#include <iterator>
 #include <unordered_map>
 #include <unordered_set>
 #include <algorithm>
@@ -19,8 +20,11 @@ using namespace std;
 
 typedef vector<size_t> IndexTuple;
 typedef string indexAsKey;
-/*struct VectorHasher { //https://stackoverflow.com/a/53283994
-    int operator()(const vector<size_t> &V) const {
+//typedef string transposeRuleAsKey;
+typedef vector<int> transposeRuleAsKey;
+
+struct FastVectorHasher { //https://stackoverflow.com/a/53283994
+    int operator()(const vector<int> &V) const {
         int hash = V.size();
         for(auto &i : V) {
             hash ^= i + 0x9e3779b9 + (hash << 6) + (hash >> 2);
@@ -28,16 +32,16 @@ typedef string indexAsKey;
         return hash;
     }
 };
-struct FastVectorHasher {
-    size_t operator()(const std::vector<size_t>& vec) const {
-        size_t hash = 0;
-        constexpr size_t prime = 31;
+struct VectorHasher {
+    int operator()(const std::vector<int>& vec) const {
+        int hash = 0;
+        constexpr int prime = 31;
         for (const auto& num : vec) {
             hash = hash * prime + (num);
         }
         return hash;
     }
-};*/
+};
 //typedef unordered_map<indexAsKey, map<int, int>,VectorHasher> umap_indices_to_loopcounter;
 typedef unordered_map<indexAsKey, map<int, int>> umap_indices_to_loopcounter;
 typedef int vert;
@@ -61,8 +65,11 @@ pair<vector<vector<vert>>, vector<vector<vert>>> get_cycles_and_sequences_for_fi
     // Assumes the vertex IDs are consecutive integers starting from 1.
     vector<vector<vert>> cycles;
     vector<vector<vert>> sequences;
+    cycles.reserve(10); //Guess at a reasonable number of cycles.
+    sequences.reserve(6*num_coupling_constants);
 
-    unordered_set<vert> visited(numVerticesTotalPlusOne-1);
+    //unordered_set<vert> visited(numVerticesTotalPlusOne-1);
+    vector<bool> visited(numVerticesTotalPlusOne, false);
 
     vector<pair<vert, vert>> lengths(numVerticesTotalPlusOne); //Reserve num_indices +1 
     // Iterate from 1, as that is the first vertex. We leave the zero entry empty.
@@ -83,7 +90,8 @@ pair<vector<vector<vert>>, vector<vector<vert>>> get_cycles_and_sequences_for_fi
         vert vertex = vertexAndValency.first;
         vert isValencyTwo = vertexAndValency.second; //Valency is 0 if started on vertex of valency one, otherwise nonzero.
 
-        if (visited.find(vertex) == visited.end()) { //This does indeed check if an object is present.
+        //if (visited.find(vertex) == visited.end()) { //This does indeed check if an object is present.
+        if (!visited[vertex]) { //This does indeed check if an object is present.
             vert previous = 0;
             vert current = vertex;
             vector<vert> path;
@@ -100,7 +108,8 @@ pair<vector<vector<vert>>, vector<vector<vert>>> get_cycles_and_sequences_for_fi
 
             while (true) {
                 path.push_back(current);
-                visited.insert(current);
+                //visited.insert(current);
+                visited[current] = true;
 
                 const array<vert,2>& neighbors = adjacency_dict[current];
 
@@ -141,8 +150,8 @@ pair<vector<vector<vert>>, vector<vector<vert>>> get_cycles_and_sequences_for_fi
  }
 */
 
-std::vector<int> flattenVector(const std::vector<array<int,2>>& inputVector,const size_t& finalTruleSize) {
-    std::vector<int> flattened(finalTruleSize);
+std::vector<int> flattenVector(const std::vector<array<int,2>>& inputVector) {
+    std::vector<int> flattened;
     for (const auto& subVector : inputVector) {
         flattened.insert(flattened.end(), subVector.begin(), subVector.end());
     }
@@ -164,8 +173,9 @@ std::vector<int> getTransposeForm(const std::vector<int>& out) {
     // Create a map to assign new values to sorted elements
     //for (auto const& c :fout)std::cout << c << ' ';
     //std::vector<int> out = {15, 3, 36, 33, 1, 13, 34, 31, 14, 2, 32, 35};
-    static const size_t finalTruleSize = out.size();
-    std::unordered_map<int, int> mapToNew(finalTruleSize);
+    size_t finalTruleSize = out.size();
+    std::unordered_map<int, int> mapToNew;
+    mapToNew.reserve(finalTruleSize);
 
     std::vector<int> sortedOut = out;
     std::sort(sortedOut.begin(), sortedOut.end());
@@ -177,7 +187,7 @@ std::vector<int> getTransposeForm(const std::vector<int>& out) {
     vert firstInPair;
     vert secondInPair;
     for (size_t i = 0; i <finalTruleSize; i += 2) {
-        firstInPair = mapToNew[out[i]];
+        firstInPair = mapToNew[out[i]]; //Note, definitely out here. The point being is that we are mapping out -> (position in sortedOut);
         secondInPair = mapToNew[out[i + 1]];
         if (firstInPair < secondInPair) {
             partitioned[i/2] = {firstInPair,secondInPair};
@@ -192,13 +202,13 @@ std::vector<int> getTransposeForm(const std::vector<int>& out) {
             if (a[0] % num_colours == b[0] % num_colours){
                 return a[0]<b[0];
             } else{
-                return (a[0] - 1) % num_colours < (b[0] - 1) % num_colours;
+                return (a[0] - 1) % num_colours < (b[0] - 1) % num_colours; // Subtraction necessary here to ensure that the colour 1 appears before the colour 3
             }
 
         } // comp: comparison function object (i.e. an object that satisfies the requirements of Compare) which returns true if the first argument is less than (i.e. is ordered before) the second. 
     );
 
-    return flattenVector(partitioned,finalTruleSize);
+    return flattenVector(partitioned);
 } 
 
 
@@ -297,11 +307,11 @@ vector<pair<IndexTuple,Result>> mapTuples(Function&& function, const std::vector
 
 // Helper function to convert a vector to a string
 string vectorToString(const vector<int>& vec) {
-    ostringstream ss;
-    for (const auto& value : vec) {
-        ss << value << ",";
-    }
-    return ss.str();
+    ostringstream oss;
+
+    std::copy(vec.begin(), vec.end(), std::ostream_iterator<int>(oss, ","));
+    //for (const auto& value : vec) { oss << value << ","; }
+    return oss.str();
 }
 
 
@@ -327,25 +337,23 @@ string makeMMAIndexStringCoeffMap(const IndexTuple& indices) {
 }
 
 template <typename Function, typename List, typename Result>
-unordered_map<string,umap_indices_to_loopcounter> mapTuplesAndGroup(Function&& function, const std::vector<List>& lists) {
+unordered_map<transposeRuleAsKey,umap_indices_to_loopcounter,FastVectorHasher> mapTuplesAndGroup(Function&& function, const std::vector<List>& lists) {
     const size_t numLists = lists.size();
     std::vector<size_t> sizes(numLists);
 
     IndexTuple indices(numLists, 0);
     indexAsKey indicesMapped;
 
-    unordered_map<string,umap_indices_to_loopcounter> groups;
+    unordered_map<transposeRuleAsKey,umap_indices_to_loopcounter,FastVectorHasher> groups;
 
     size_t totalTuples = 1;
     for (size_t i = 0; i < numLists; ++i) {
         sizes[i] = lists[i].size();
         totalTuples *= sizes[i];
     }
-    //vector<pair<IndexTuple,Result>> results(totalTuples);
     std::vector<typename List::value_type> elements(numLists);
 
     Result resultNumloopsAndTrules;
-    string stringKey;
     
     for (size_t i = 0; i < totalTuples; ++i) {
         for (size_t j = 0; j < numLists; ++j) {
@@ -356,7 +364,8 @@ unordered_map<string,umap_indices_to_loopcounter> mapTuplesAndGroup(Function&& f
         //indicesMapped =  indices;//makeMMAIndexStringCoeffMap(indices); // Map indices to reduce the coeff complexity.
         indicesMapped = makeMMAIndexStringCoeffMap(indices); // Map indices to reduce the coeff complexity.
 
-        groups[vectorToString(resultNumloopsAndTrules.second)][indicesMapped][resultNumloopsAndTrules.first]++; //Increment the number of entries for this coefficient at this loop count.
+        //groups[vectorToString(resultNumloopsAndTrules.second)][indicesMapped][resultNumloopsAndTrules.first]++; //Increment the number of entries for this coefficient at this loop count.
+        groups[resultNumloopsAndTrules.second][indicesMapped][resultNumloopsAndTrules.first]++; //Increment the number of entries for this coefficient at this loop count.
 
         size_t k = numLists - 1;
         while (k != static_cast<size_t>(-1)) {
@@ -387,7 +396,7 @@ analysisResultType analyseListOfAdjLists(const vector<adjList>& adjLists) {
     }
     //std::cout << "Elements: "; for (const auto& element :totalAdjList) { std::cout << "(" << element[0] << " " << element[1] << ") "; } std::cout << std::endl;
 
-    // graphWithoutContractions itself is never used again after this
+    // This is the only time contractionRules is used. Adding in contraction rules on top of the extant.
     for (const auto& pair : contractionRules) { 
         int vertex1 = pair[0];
         int vertex2 = pair[1];
@@ -428,6 +437,8 @@ for (const auto& sequence : sequences) {
     return make_pair(cycles.size(), transposeFormToBe);
 }
 
+
+//These functions are only executed O(1) times, so no need to optimise.
 vector<vector<int>> mapCCstrToCoeffIntCanonicaliser(const string& input) {
  vector<vector<int>> result;
  for (const auto& ch : input) {
@@ -448,7 +459,6 @@ vector<unordered_map<string,string>> result;
  }
  return result;
 }
-
 vector<array<int,2>> parseStringContractionRules(const string& input) {
     vector<array<int,2>> result;
     istringstream ss(input);
@@ -497,8 +507,8 @@ string mapIndexStringToActualVariables(const string& inputString) {
     string token;
     string result;
     int whichCCOn =0; //Start on the first vertex.
-    while (getline(iss, token, ',')) { //https://stackoverflow.com/questions/13354394/reading-object-from-const-unordered-map
-        result +=ccIntToMapCoeffCanonicalIntToStr[whichCCOn].at(token);
+    while (getline(iss, token, ',')) { 
+        result +=ccIntToMapCoeffCanonicalIntToStr[whichCCOn].at(token);//https://stackoverflow.com/questions/13354394/reading-object-from-const-unordered-map
         whichCCOn++;
     }
     return result;
@@ -555,7 +565,8 @@ int main(int argc, char* argv[]) {
     //std::cout << "Total tuples: " << allTuplesRun.size() << std::endl;
     //map<string,vector<string>> gathered = mapTuplesAndGroup<decltype(analyseListOfAdjLists), vector<adjList>,analysisResultType>(analyseListOfAdjLists, allNumbers); 
     
-    unordered_map<string,umap_indices_to_loopcounter> gathered = mapTuplesAndGroup<decltype(analyseListOfAdjLists), vector<adjList>,analysisResultType>(analyseListOfAdjLists, allNumbers);
+    //unordered_map<transposeRuleAsKey,umap_indices_to_loopcounter> gathered = mapTuplesAndGroup<decltype(analyseListOfAdjLists), vector<adjList>,analysisResultType>(analyseListOfAdjLists, allNumbers);
+    unordered_map<transposeRuleAsKey,umap_indices_to_loopcounter,FastVectorHasher> gathered = mapTuplesAndGroup<decltype(analyseListOfAdjLists), vector<adjList>,analysisResultType>(analyseListOfAdjLists, allNumbers);
 
     /********************************/
     /*** Now perform output */
@@ -591,7 +602,8 @@ int main(int argc, char* argv[]) {
                     rS << ")+";
                 }
             rS.seekp(-1,rS.cur);
-            rS << ",{" << structAndOverallCoeff.first;
+            //rS << ",{" << structAndOverallCoeff.first;
+            rS << ",{" << vectorToString(structAndOverallCoeff.first);
         rS.seekp(-1,rS.cur);
         rS << "}},";
     }
